@@ -1,16 +1,11 @@
+//**************************************************************** 
+//Function to send messages to PlaySMS apps for bus status updates
+// Moonspec Design, Copyright 2018
+//****************************************************************
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 admin.initializeApp(functions.config().firebase);
 exports.sendPushNotifcation = functions.database.ref('/Messages/{id}').onWrite((data, context) => {
-    //const receiverPhoneNumber :string = data.phoneNumber;
-    const payload = {
-        notification: {
-            title: 'Bus Ride Notifcation',
-            body: 'Bus Ride Status Change',
-            sound: 'default',
-            badge: '1'
-        }
-    };
     //next figure out how to store tokens and then use them to send messages
     //in future iteration we will actually read this from firestore as we figure out how to keep it 
     //maintatined...ees
@@ -32,8 +27,29 @@ exports.sendPushNotifcation = functions.database.ref('/Messages/{id}').onWrite((
             // console.log(value.phoneNumber);
         }
     });
-    return admin.messaging().sendToDevice(tokenOut, payload).then(response => {
-        //console.log('good send');
+    //now generate the payload for the message
+    const messageOut = {
+        notification: {
+            title: 'Bus Ride Notification- ' + val.Sender,
+            body: String(val.MessageBody)
+        },
+        webpush: {
+            notification: {
+                sound: 'default',
+                badge: '1'
+            }
+        },
+        token: tokenOut
+    };
+    console.log(messageOut);
+    //dryRun variable to true means the message is validated but not sent.  Good for debugging
+    const dryRun = false;
+    admin.messaging().send(messageOut, dryRun)
+        .then((response) => {
+        console.log('Dry run successful!', response);
+    })
+        .catch((error) => {
+        console.log('Error sending message dry run: ', error);
     });
 });
 //# sourceMappingURL=index.js.map
