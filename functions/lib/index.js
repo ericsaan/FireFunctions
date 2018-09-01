@@ -36,7 +36,8 @@ exports.sendPushNotifcation = functions.database.ref('/Messages/{id}').onWrite((
         webpush: {
             notification: {
                 sound: 'default',
-                badge: '1'
+                badge: '1',
+                icon: 'cartoon-school-bus-clipart-17.png'
             }
         },
         token: tokenOut

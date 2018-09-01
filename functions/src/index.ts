@@ -48,7 +48,8 @@ const messageOut = {
     webpush: {
         notification: {
             sound: 'default',
-            badge: '1'
+            badge: '1',
+            icon: 'cartoon-school-bus-clipart-17.png'
         }
     },
     token: tokenOut
