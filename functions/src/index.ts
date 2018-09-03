@@ -9,28 +9,21 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 admin.initializeApp(functions.config().firebase);
    
-    exports.sendPushNotifcation = functions.database.ref('/Messages/{id}').onWrite((data, context )=> {
-       
-      
+exports.sendPushNotifcation = functions.database.ref('/Messages/{id}').onWrite((data, context )=> {
+
+//if a delete then don't run the rest of the code
+if (data.before.exists()){
+    console.log('Deleting record');
+    return null;
+}
+    
+
 //next figure out how to store tokens and then use them to send messages
-//in future iteration we will actually read this from firestore as we figure out how to keep it 
-//maintatined...ees
 const snapshot = data.after;
 const val = snapshot.val();
 
-
 const db = admin.firestore();
 
-
-
-//const tokenArray = queryRef;
-// [
-//   {"token": "fm4b48_BOjg:APA91bFzg3QL58jhHa8rhvpHxZk6q0LwCPxMgbRw8yrbs_yMufyLEtZu5ENlKWWpFXhqmBdV9hRtHu5kvyRzKh1BiJmRkq6icw2Mn4MS8-fM-GP5G3Dr1qYBJGUIt4uUkrlwrP7rJExP", "sender": "ericsaan@gmail.com"},
-//   {"token": "fm4b48_BOjg:APA91bFzg3QL58jhHa8rhvpHxZk6q0LwCPxMgbRw8yrbs_yMufyLEtZu5ENlKWWpFXhqmBdV9hRtHu5kvyRzKh1BiJmRkq6icw2Mn4MS8-fM-GP5G3Dr1qYBJGUIt4uUkrlwrP7rJExP", "sender": "ericsaan@gmail.com"},
-//   {"token": "fm4b48_BOjg:APA91bFzg3QL58jhHa8rhvpHxZk6q0LwCPxMgbRw8yrbs_yMufyLEtZu5ENlKWWpFXhqmBdV9hRtHu5kvyRzKh1BiJmRkq6icw2Mn4MS8-fM-GP5G3Dr1qYBJGUIt4uUkrlwrP7rJExP", "sender": "ericsaan@gmail.com"}
-
-// ];
- 
 let tokenOut = "no match";  
 
 var tokenDocs = db.collection('userFcmtokens');
@@ -39,8 +32,8 @@ var queryRef = tokenDocs.where('email', '==',val.Receiver).get()
     snap.forEach(doc => {
         console.log(doc.id, '=>', doc.data());
         
-        console.log('Receiver from message db => ',  val.Receiver);
-        console.log('UserDB data.Email is => ', doc.data().email);
+        //console.log('Receiver from message db => ',  val.Receiver);
+        //console.log('UserDB data.Email is => ', doc.data().email);
         //console.log('UserDB Email is => ', doc.email());
 
         if (val.Receiver === doc.data().email) {
@@ -65,17 +58,25 @@ var queryRef = tokenDocs.where('email', '==',val.Receiver).get()
                 token: tokenOut
                 };
 
-            console.log(messageOut);
+            //console.log(messageOut);
 
             //dryRun variable to true means the message is validated but not sent.  Good for debugging
-            const dryRun = false;
+            let dryRun = true;
 
             admin.messaging().send(messageOut, dryRun)
             .then((response) => {
-                console.log('Message send successful! ',response);
+                console.log('Token Validation Ok, Sending meesage');
+                dryRun = false;
+                admin.messaging().send(messageOut, dryRun)
+                .then((responseReal) => {
+                    console.log('Message send Successful! ',responseReal);
+                })
+                .catch((errorReal) => {
+                    console.log('Message send Failure! ',errorReal);
+                });
             })
             .catch((error) => {
-                console.log('Error sending message : ',error);
+                console.log('Error Validating Message/Token : ',error);
             });
         }
     });
