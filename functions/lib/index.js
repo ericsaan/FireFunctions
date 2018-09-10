@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+//import { exists } from "fs";
 //**************************************************************** 
 //Function to send messages to PlaySMS apps for bus status updates
 // Moonspec Design, Copyright 2018
@@ -18,8 +19,8 @@ exports.sendPushNotifcation = functions.database.ref('/Messages/{id}').onWrite((
     const val = snapshot.val();
     const db = admin.firestore();
     let tokenOut = "no match";
-    var tokenDocs = db.collection('userFcmtokens');
-    var queryRef = tokenDocs.where('email', '==', val.Receiver).get()
+    let tokenDocs = db.collection('userFcmtokens');
+    let queryRef = tokenDocs.where('email', '==', val.Receiver).get()
         .then(snap => {
         snap.forEach(doc => {
             console.log(doc.id, '=>', doc.data());
@@ -64,6 +65,64 @@ exports.sendPushNotifcation = functions.database.ref('/Messages/{id}').onWrite((
                 });
             }
         });
+    })
+        .catch(err => {
+        console.log('Error getting documents', err);
+    });
+});
+//******************************************************************************************
+// Now the function we will call from CRON to delete old user device tokens
+//******************************************************************************************
+exports.deleteOldMessages = functions.https.onRequest((req, res) => {
+    //next figure out how to store tokens and then use them to send messages
+    //const snapshot = data.after;
+    //const val = snapshot.val();
+    const db = admin.firestore();
+    let tokenOut = "no match";
+    let tokenDocs = db.collection('userFcmtokens').get()
+        //let queryRef = tokenDocs.get()
+        .then(snap => {
+        snap.forEach(doc => {
+            //console.log(doc.id, '=>', doc.data());
+            tokenOut = doc.data().fcmToken;
+            //now generate the payload for the message
+            const messageOut = {
+                notification: {
+                    title: 'Bus Ride Notification- ',
+                    body: 'Token Check'
+                },
+                webpush: {
+                    notification: {
+                        sound: 'default',
+                        badge: '1'
+                    }
+                },
+                token: tokenOut
+            };
+            //console.log(messageOut);
+            //dryRun variable to true means the message is validated but not sent.  Good for debugging
+            let dryRun = true;
+            admin.messaging().send(messageOut, dryRun)
+                .then((response) => {
+                console.log('Token Validation Ok ', doc.data().email, doc.data().fcmToken);
+                //since ok validation we don't need to delete the record
+            })
+                .catch((error) => {
+                console.log('Error Validating Message/Token : ', error, doc.data().fcmToken);
+                const returnCode = error.code;
+                // if (returnCode === "messaging/registration-token-not-registered")
+                //  {
+                doc.ref.delete().then(() => {
+                    console.log('Deleted token (after doc.delete): ', doc.data().fcmToken);
+                })
+                    .catch(function (errorDelete) {
+                    console.log('Error Deleted User-Device Combination: ', errorDelete);
+                });
+                //};
+            });
+        });
+        console.log('Done Scouring FCM Token Records');
+        return Promise.resolve("Delete FCMTokens Job Completed Successfuly");
     })
         .catch(err => {
         console.log('Error getting documents', err);
