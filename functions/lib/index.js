@@ -23,25 +23,15 @@ exports.sendPushNotifcation = functions.database.ref('/Messages/{id}').onWrite((
     let queryRef = tokenDocs.where('email', '==', val.Receiver).get()
         .then(snap => {
         snap.forEach(doc => {
-            console.log(doc.id, '=>', doc.data());
-            //console.log('Receiver from message db => ',  val.Receiver);
-            //console.log('UserDB data.Email is => ', doc.data().email);
-            //console.log('UserDB Email is => ', doc.email());
+            // console.log(doc.id, '=>', doc.data());
             if (val.Receiver === doc.data().email) {
                 tokenOut = doc.data().fcmToken;
-                console.log('got a match! ', doc.data().email);
+                // console.log('got a match! ', doc.data().email);
                 //now generate the payload for the message
                 const messageOut = {
                     notification: {
                         title: 'Bus Ride Notification- ' + val.Sender,
                         body: String(val.MessageBody)
-                    },
-                    webpush: {
-                        notification: {
-                            sound: 'default',
-                            badge: '1',
-                            icon: 'default'
-                        }
                     },
                     token: tokenOut
                 };
@@ -110,22 +100,24 @@ exports.deleteOldMessages = functions.https.onRequest((req, res) => {
                 .catch((error) => {
                 console.log('Error Validating Message/Token : ', error, doc.data().fcmToken);
                 const returnCode = error.code;
-                // if (returnCode === "messaging/registration-token-not-registered")
-                //  {
-                doc.ref.delete().then(() => {
-                    console.log('Deleted token (after doc.delete): ', doc.data().fcmToken);
-                })
-                    .catch(function (errorDelete) {
-                    console.log('Error Deleted User-Device Combination: ', errorDelete);
-                });
-                //};
+                if (returnCode === "messaging/registration-token-not-registered") {
+                    doc.ref.delete().then(() => {
+                        console.log('Deleted token (after doc.delete): ', doc.data().fcmToken);
+                    })
+                        .catch(function (errorDelete) {
+                        console.log('Error Deleted User-Device Combination: ', errorDelete);
+                    });
+                }
+                ;
             });
         });
         console.log('Done Scouring FCM Token Records');
-        return Promise.resolve("Delete FCMTokens Job Completed Successfuly");
+        //return Promise.resolve("Delete FCMTokens Job Completed Successfuly");
+        //res.send(`Delete Users Done!`);
     })
         .catch(err => {
         console.log('Error getting documents', err);
     });
+    res.send(`Delete Users Done for Real!`);
 });
 //# sourceMappingURL=index.js.map
