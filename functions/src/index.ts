@@ -1,4 +1,8 @@
-import { ClientResponse } from "http";
+import { runInThisContext } from "vm";
+
+//import * as moment from 'moment';
+
+//import { ClientResponse } from "http";
 
 //import { exists } from "fs";
 
@@ -10,7 +14,8 @@ import { ClientResponse } from "http";
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 admin.initializeApp(functions.config().firebase);
-   
+
+
 exports.sendPushNotifcation = functions.database.ref('/Messages/{id}').onWrite((data, context )=> {
 
 //if a delete then don't run the rest of the code
@@ -25,16 +30,22 @@ const snapshot = data.after;
 const val = snapshot.val();
 
 const db = admin.firestore();
+//db.settings({ timestampsInSnapshots: true });
 
 let tokenOut = "no match";  
 
-let tokenDocs = db.collection('userFcmtokens');
-    let queryRef = tokenDocs.where('email', '==',val.Receiver).get()
+const tokenDocs = db.collection('userFcmtokens');
+    const queryRef = tokenDocs.where('email', '==',val.Receiver).get()
     .then(snap => {
         snap.forEach(doc => {
         // console.log(doc.id, '=>', doc.data());
-        
-            if (val.Receiver === doc.data().email) {
+            let messageEmail = val.Receiver.toUpperCase();  //database message receiver
+            let userEmail = doc.data().email.toUpperCase();
+            // console.log('messageEmail is-> ',messageEmail);
+            // console.log('userEmail -> ',userEmail);
+
+            //if (val.Receiver === doc.data().email) {
+            if (messageEmail === userEmail) {
                 tokenOut = doc.data().fcmToken;
             // console.log('got a match! ', doc.data().email);
 
@@ -50,75 +61,123 @@ let tokenDocs = db.collection('userFcmtokens');
                 //console.log(messageOut);
 
                 //dryRun variable to true means the message is validated but not sent.  Good for debugging
-                let dryRun = true;
+                let dryRun = false;
 
                 admin.messaging().send(messageOut, dryRun)
                 .then((response) => {
-                    console.log('Token Validation Ok, Sending meesage');
-                    dryRun = false;
-                    admin.messaging().send(messageOut, dryRun)
-                    .then((responseReal) => {
-                        console.log('Message send Successful! ',responseReal);
-                    })
-                    .catch((errorReal) => {
-                        console.log('Message send Failure! ',errorReal);
-                    });
+                    //console.log('Token Validation Ok, Sending meesage');
+                    // dryRun = false;
+                    // admin.messaging().send(messageOut, dryRun)
+                    // .then((responseReal) => {
+                        console.log('Message send Successful! ',response);
+                    // })
+                    // .catch((errorReal) => {
+                    //     console.log('Message send Failure! ',errorReal);
+                    // });
                 })
-                .catch((error) => {
-                    console.log('Error Validating Message/Token : ',error);
+                .catch((error) => { 
+                  //  console.log('Error Validating Message/Token : ',error);
+                    console.log('Message send Failure! ',error);
                 });
             }
         });
+       // return true
     })
     .catch(err => {
         console.log('Error getting documents',err);
+       return false
     });
     
     });
-
+    
+    
     //******************************************************************************************
-    // Now the function we will call from CRON to delete old user device tokens
+    // Now the function we will call from CRON to delete old user messages: > 2 days old
     //******************************************************************************************
 
     
     exports.deleteOldMessages = functions.https.onRequest ((req, res) => {
+        const db = admin.database();
+        const ref = db.ref('/Messages/');  
+   
+        ref.once('value')
+        .then(function (snapshot) {
+          
+            snapshot.forEach(doc => 
+                {
+               
+                    const nowDate = new Date();
+                    const messageDate = doc.val().DateString;
+                    console.log ('now date is-> ',nowDate);
+                    console.log ('message Date is-> ', messageDate);
+
+                    console.log(doc.val().DateString);
+                    const indexOfComma = messageDate.indexOf(",");
+                    const messageDateString = messageDate.substr(indexOfComma-2, 2);
+                    const messageDateInt = Number(messageDateString);
+                    const nowDay = nowDate.getDate();
+
+                    console.log('now day is-> ',nowDay);
+                    console.log('messageDateInt-> ',messageDateInt);
+
+                    if ((messageDateInt === nowDay) || messageDateInt === (nowDay - 1) || messageDateInt === (nowDay - 2)) {
+                        console.log('Do nothing');
+                        
+                     } else {
+                        ref.child(doc.data().id).remove()
+                        .then (() => {
+                           console.log('Deleted message): ', doc.data().DateString); 
+                       })
+                       .catch(function(errorDeleteNotReal) {
+                       
+                           console.log('Error Deleting Message: ',errorDeleteNotReal);
+                           
+                       });
+                     }
+                    
+
+
+                });
+        });
+                  
+            //console.log ('Done Scouring old Bus messages');
+            res.status(200).send(`Delete Old Messages Done!`);    
+    
+    });  //enddeleteoldmesssages
+    
+    //******************************************************************************************
+    // Now the function we will call from CRON to delete old user device tokens
+    //******************************************************************************************
+
+
+    exports.deleteOldDevices = functions.https.onRequest ((req, res) => {
         
-
-        //next figure out how to store tokens and then use them to send messages
-        //const snapshot = data.after;
-        //const val = snapshot.val();
-
         const db = admin.firestore();
+        //db.settings({ timestampsInSnapshots: true });
 
         let tokenOut = "no match";  
 
         let tokenDocs = db.collection('userFcmtokens').get()
-        //let queryRef = tokenDocs.get()
         .then(snap => 
             {
             snap.forEach(doc => 
                 {
                 //console.log(doc.id, '=>', doc.data());
                 tokenOut = doc.data().fcmToken;
-        
+                    //console.log('token out is -> ',tokenOut);
                     //now generate the payload for the message
                     const messageOut = {
                         notification: {
                             title: 'Bus Ride Notification- ',
                             body: 'Token Check'
                         },
-                        webpush: {
-                            notification: {
-                                sound: 'default',
-                                badge: '1'
-                            }
-                        },
+                       
                         token: tokenOut
                         };
                     //console.log(messageOut);
 
                     //dryRun variable to true means the message is validated but not sent.  Good for debugging
-                    let dryRun = true;
+                    const dryRun = true;
 
                     admin.messaging().send(messageOut, dryRun)
                     .then((response) => {
@@ -146,11 +205,11 @@ let tokenDocs = db.collection('userFcmtokens');
             })
             console.log ('Done Scouring FCM Token Records');
             //return Promise.resolve("Delete FCMTokens Job Completed Successfuly");
-            res.status(200).send(`Delete Users Done, Inner Loop!`);
+            res.status(200).send(`Delete Users Done!`);
         })
         .catch(err => {
             console.log('Error getting documents',err);
-            res.status(501)
+            res.status(501);
         });
         //res.status(200).send(`Delete Users Done for Real!`);
 
