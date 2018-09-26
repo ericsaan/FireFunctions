@@ -27,8 +27,11 @@ exports.sendPushNotifcation = functions.database.ref('/Messages/{id}').onWrite((
         .then(snap => {
         snap.forEach(doc => {
             // console.log(doc.id, '=>', doc.data());
-            let messageEmail = val.Receiver.toUpperCase(); //database message receiver
-            let userEmail = doc.data().email.toUpperCase();
+            const messageEmail = val.Receiver.toUpperCase(); //database message receiver
+            const userEmail = doc.data().email.toUpperCase();
+            // if val.ReceiverName <> "" {
+            //     userEmail = val.ReceiverName
+            // }
             // console.log('messageEmail is-> ',messageEmail);
             // console.log('userEmail -> ',userEmail);
             //if (val.Receiver === doc.data().email) {
@@ -45,7 +48,7 @@ exports.sendPushNotifcation = functions.database.ref('/Messages/{id}').onWrite((
                 };
                 //console.log(messageOut);
                 //dryRun variable to true means the message is validated but not sent.  Good for debugging
-                let dryRun = false;
+                const dryRun = false;
                 admin.messaging().send(messageOut, dryRun)
                     .then((response) => {
                     //console.log('Token Validation Ok, Sending meesage');
@@ -93,20 +96,18 @@ exports.deleteOldMessages = functions.https.onRequest((req, res) => {
             console.log('messageDateInt-> ', messageDateInt);
             if ((messageDateInt === nowDay) || messageDateInt === (nowDay - 1) || messageDateInt === (nowDay - 2)) {
                 console.log('Do nothing');
-                ref.child(doc.data().id).remove()
+            }
+            else {
+                console.log('Deleting message): ', doc.val().DateString);
+                //db.ref('Messages/' + doc.val().DateString).remove()
+                //ref.delete(doc.ref)
+                //
+                db.child(doc.val()).removeValue() //not currently working
                     .then(() => {
-                    console.log('Deleted message): ', doc.data().DateString);
+                    console.log('Deleted message');
                 })
                     .catch(function (errorDeleteNotReal) {
                     console.log('Error Deleting Message: ', errorDeleteNotReal);
-                });
-            }
-            else {
-                ref.child(doc.data().id).then(() => {
-                    console.log('Deleted message): ', doc.data().DateString);
-                })
-                    .catch(function (errorDelete) {
-                    console.log('Error Deleting Message: ', errorDelete);
                 });
             }
         });
@@ -121,7 +122,7 @@ exports.deleteOldDevices = functions.https.onRequest((req, res) => {
     const db = admin.firestore();
     //db.settings({ timestampsInSnapshots: true });
     let tokenOut = "no match";
-    let tokenDocs = db.collection('userFcmtokens').get()
+    const tokenDocs = db.collection('userFcmtokens').get()
         .then(snap => {
         snap.forEach(doc => {
             //console.log(doc.id, '=>', doc.data());
@@ -166,5 +167,79 @@ exports.deleteOldDevices = functions.https.onRequest((req, res) => {
         res.status(501);
     });
     //res.status(200).send(`Delete Users Done for Real!`);
+});
+exports.sendPushNotifcationFireStore = functions.firestore
+    .document('messages/{id}')
+    .onCreate((data, context) => {
+    //if a delete then don't run the rest of the code
+    // if (data.before.exists()){
+    //     console.log('Deleting record');
+    //     return null;
+    // }
+    //next figure out how to store tokens and then use them to send messages
+    const snapshot = data.data();
+    // const val = snapshot.val();
+    const receiverOut = snapshot.Receiver;
+    const senderOut = snapshot.Sender;
+    const senderNameOut = snapshot.SenderName;
+    const messageBodyOut = snapshot.MessageBody;
+    const db = admin.firestore();
+    //db.settings({ timestampsInSnapshots: true });
+    let tokenOut = "no match";
+    const tokenDocs = db.collection('userFcmtokens');
+    const queryRef = tokenDocs.where('email', '==', receiverOut).get()
+        .then(snap => {
+        snap.forEach(doc => {
+            // console.log(doc.id, '=>', doc.data());
+            const messageEmail = receiverOut.toUpperCase(); //database message receiver
+            const userEmail = doc.data().email.toUpperCase();
+            console.log('messageEmail is-> ', messageEmail);
+            console.log('userEmail -> ', userEmail);
+            //if (val.Receiver === doc.data().email) {
+            if (messageEmail === userEmail) {
+                tokenOut = doc.data().fcmToken;
+                // console.log('got a match! ', doc.data().email);
+                //now generate the payload for the message
+                let outName = "";
+                if (senderNameOut !== "") {
+                    outName = senderNameOut; //i.e., use nickname
+                }
+                else {
+                    outName = senderOut;
+                }
+                const messageOut = {
+                    notification: {
+                        title: 'Bus Ride Notification- ' + outName,
+                        body: String(messageBodyOut)
+                    },
+                    token: tokenOut
+                };
+                //console.log(messageOut);
+                //dryRun variable to true means the message is validated but not sent.  Good for debugging
+                const dryRun = false;
+                admin.messaging().send(messageOut, dryRun)
+                    .then((response) => {
+                    //console.log('Token Validation Ok, Sending meesage');
+                    // dryRun = false;
+                    // admin.messaging().send(messageOut, dryRun)
+                    // .then((responseReal) => {
+                    console.log('Message send Successful! ', response);
+                    // })
+                    // .catch((errorReal) => {
+                    //     console.log('Message send Failure! ',errorReal);
+                    // });
+                })
+                    .catch((error) => {
+                    //  console.log('Error Validating Message/Token : ',error);
+                    console.log('Message send Failure! ', error);
+                });
+            }
+        });
+        // return true
+    })
+        .catch(err => {
+        console.log('Error getting documents', err);
+        return false;
+    });
 });
 //# sourceMappingURL=index.js.map
