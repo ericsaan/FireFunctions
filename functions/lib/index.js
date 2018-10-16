@@ -77,12 +77,38 @@ exports.sendPushNotifcation = functions.database.ref('/Messages/{id}').onWrite((
 //******************************************************************************************
 // Now the function we will call from CRON to delete old user messages: > 2 days old
 //******************************************************************************************
-exports.deleteOldMessages = functions.https.onRequest((req, res) => {
-    const db = admin.database();
-    const ref = db.ref('/Messages/');
-    ref.once('value')
-        .then(function (snapshot) {
-        snapshot.forEach(doc => {
+exports.deleteOldMessagesLight = functions.https.onRequest((req, res) => {
+    console.log("about to read messages");
+    const dbMessages = admin.firestore();
+    console.log("fired up admin.firestore");
+    let messageDocs = dbMessages.collection('messages');
+    console.log("initialized messagedocs");
+    let query = messageDocs.get()
+        .then(snapshot => {
+        // console.log ("in the foreach loop");
+        snapshot.foreEach(doc => {
+            console.log(doc.id, '=> ', doc.data());
+        });
+    })
+        .catch(err => {
+        console.log('Error getting docs', err);
+    });
+    //      const messageDocs = db.collection('messages').get()
+    //     .then(snap => 
+    //         {
+    //         snap.forEach(doc => 
+    //             {
+    //                 console.log(doc.id, '=>', doc.data());
+    //             })
+    //         })
+    res.status(200).send(`Delete Old Messages Light Done!`);
+});
+exports.deleteOldMessages2 = functions.https.onRequest((req, res) => {
+    console.log("about to read messages");
+    const db = admin.firestore();
+    const tokenDocs = db.collection('messages').get()
+        .then(snap => {
+        snap.forEach(doc => {
             const nowDate = new Date();
             const messageDate = doc.val().DateString;
             console.log('now date is-> ', nowDate);
@@ -99,17 +125,14 @@ exports.deleteOldMessages = functions.https.onRequest((req, res) => {
             }
             else {
                 console.log('Deleting message): ', doc.val().DateString);
-                //db.ref('Messages/' + doc.val().DateString).remove()
-                //ref.delete(doc.ref)
-                //
-                db.child(doc.val()).removeValue() //not currently working
-                    .then(() => {
-                    console.log('Deleted message');
+                doc.ref.delete().then(() => {
+                    console.log('Deleted old message', doc.data().id);
                 })
-                    .catch(function (errorDeleteNotReal) {
-                    console.log('Error Deleting Message: ', errorDeleteNotReal);
+                    .catch(function (errorDelete) {
+                    console.log('Error Deleting old data: ', errorDelete);
                 });
             }
+            ;
         });
     });
     //console.log ('Done Scouring old Bus messages');
@@ -193,8 +216,8 @@ exports.sendPushNotifcationFireStore = functions.firestore
             // console.log(doc.id, '=>', doc.data());
             const messageEmail = receiverOut.toUpperCase(); //database message receiver
             const userEmail = doc.data().email.toUpperCase();
-            console.log('messageEmail is-> ', messageEmail);
-            console.log('userEmail -> ', userEmail);
+            // console.log('messageEmail is-> ',messageEmail);
+            // console.log('userEmail -> ',userEmail);
             //if (val.Receiver === doc.data().email) {
             if (messageEmail === userEmail) {
                 tokenOut = doc.data().fcmToken;
@@ -212,9 +235,16 @@ exports.sendPushNotifcationFireStore = functions.firestore
                         title: 'Bus Ride Notification- ' + outName,
                         body: String(messageBodyOut)
                     },
+                    apns: {
+                        payload: {
+                            aps: {
+                                sound: "default"
+                            }
+                        }
+                    },
                     token: tokenOut
                 };
-                //console.log(messageOut);
+                console.log(messageOut);
                 //dryRun variable to true means the message is validated but not sent.  Good for debugging
                 const dryRun = false;
                 admin.messaging().send(messageOut, dryRun)
